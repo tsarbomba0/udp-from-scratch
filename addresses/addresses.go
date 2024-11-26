@@ -1,9 +1,12 @@
 package addresses
 
 import (
+	"bytes"
 	"errors"
 	"regexp"
+	"strconv"
 	"strings"
+	"udp-from-scratch/util"
 )
 
 // Type to define Source and Destination address
@@ -22,11 +25,13 @@ func ParseIP(addr string) []byte {
 		panic(errors.New("parsed incorrect address"))
 	}
 
-	buf := make([]byte, 4)
+	buf := new(bytes.Buffer)
 
 	for i := 0; i <= 3; i++ {
-		buf = append(buf, []byte(addressSlice[i])...)
+		n, err := strconv.Atoi(addressSlice[i])
+		util.OnError(err)
+		buf.WriteByte(byte(n))
 	}
 
-	return buf
+	return buf.Bytes()
 }

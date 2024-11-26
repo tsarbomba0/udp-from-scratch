@@ -3,12 +3,13 @@ package ipv4
 import (
 	"bytes"
 	"encoding/binary"
+	"udp-from-scratch/addresses"
 )
 
-// Type to define Source and Destination address
-type Addresses struct {
-	Source      []byte
-	Destination []byte
+type IP struct {
+	Protocol uint8
+	Addr     *addresses.Addresses
+	TTL      uint8
 }
 
 // Function to calculate the IP checksum
@@ -33,36 +34,36 @@ func IPChecksum(header []byte) []byte {
 }
 
 // Creates a IP Packet
-func Packet(data []byte, ttl uint8, protocol uint8, addr *Addresses) []byte {
+func Packet(data []byte, ip *IP) []byte {
 	buf := bytes.NewBuffer([]byte{
-		115, // Version + IHL
-		0,   // DiffServ + ECN
+		69, // Version + IHL
+		0,  // DiffServ + ECN
 	})
 
 	length := make([]byte, 2)
-	binary.LittleEndian.PutUint16(length, uint16(len(data)))
+	binary.BigEndian.PutUint16(length, uint16(len(data)+24))
 
 	// length
 	buf.Write(length)
 
 	buf.Write([]byte{
-		0, 0, // indentification, not used here
+		0, 0, // identification, not used here
 		0, 0, // flags 3 bits fragment offset 13 bits
-		ttl,      // ttl
-		protocol, // udp is 17
+		ip.TTL,      // ttl
+		ip.Protocol, // udp is 17
 	})
 
 	// at first a empty checksum field, later filled out
 	buf.Write(make([]byte, 2))
 
 	// Source and destination address
-	buf.Write(addr.Source)
-	buf.Write(addr.Destination)
+	buf.Write(ip.Addr.Source)
+	buf.Write(ip.Addr.Destination)
 
 	// Checksum
 	b := buf.Bytes()
-	checksum := IPChecksum(b)
-	copy(b[8:10], checksum)
+	//checksum := IPChecksum(b)
+	//copy(b[8:10], checksum)
 
 	return append(b, data...)
 }
