@@ -4,20 +4,21 @@ import (
 	"bytes"
 	"hash/crc32"
 	"net"
+	"pisa/addresses"
+	"pisa/ipv4"
+	"pisa/udp"
 	"syscall"
-	"udp-from-scratch/addresses"
-	"udp-from-scratch/ipv4"
-	"udp-from-scratch/udp"
 )
 
-func SendEthernet(payload []byte, addr *addresses.Addresses, udpinfo *udp.PacketUDP, device net.Interface, targetMAC []byte) {
+func SendEthernet(payload []byte, addr *addresses.Addresses, udpinfo *udp.HeaderUDP, device net.Interface, targetMAC []byte) error {
 	// Applying the headers
 	udpPacket := udp.Datagram(payload, udpinfo, addr)
-	ipPacket := ipv4.Packet(udpPacket, &ipv4.IP{
-		Protocol: 17,
-		Addr:     addr,
-		TTL:      128,
-	})
+	ipPacket := ipv4.CreateFastPacket(&ipv4.IPv4Header{
+		SourceAddr:      addr.Source,
+		DestinationAddr: addr.Destination,
+		Protocol:        17,
+		TTL:             64,
+	}, udpPacket)
 
 	// Destination and Source MAC
 	ethernetPacket := bytes.NewBuffer(targetMAC)
@@ -40,14 +41,14 @@ func SendEthernet(payload []byte, addr *addresses.Addresses, udpinfo *udp.Packet
 	fd, err := syscall.Socket(syscall.AF_PACKET, syscall.SOCK_RAW, 0)
 	if err != nil {
 		syscall.Close(fd)
-		panic(err)
+		return (err)
 	}
 
 	// Bind to device
 	err = syscall.BindToDevice(fd, device.Name)
 	if err != nil {
 		syscall.Close(fd)
-		panic(err)
+		return (err)
 	}
 	// Defer closing
 	defer syscall.Close(fd)
@@ -66,7 +67,8 @@ func SendEthernet(payload []byte, addr *addresses.Addresses, udpinfo *udp.Packet
 	err = syscall.Sendto(fd, ethernetPacket.Bytes(), 0, &ethernetAddress)
 	if err != nil {
 		syscall.Close(fd)
-		panic(err)
+		return (err)
 	}
 
+	return err
 }
