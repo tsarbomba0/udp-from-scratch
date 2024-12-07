@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"pisa/util"
 )
 
 // Struct for an IP Header (No options)
 type IPv4Header struct {
 	HeaderLen       byte
+	DSCPECN         byte
 	TotalLength     uint16
 	Identification  uint16
 	Flags           byte
@@ -21,8 +21,20 @@ type IPv4Header struct {
 	DestinationAddr []byte
 }
 
+// Helper function to create the field for DSCP (6 bits) and ECN (2 bits)
+func (h *IPv4Header) DSCPECN(dscp byte, ecn byte) (byte, error) {
+	if dscp > 32 {
+		return 0, fmt.Errorf("DSCP field can be set to 32 maximum.")
+	} else if ecn > 3 {
+		return 0, fmt.Errorf("ECN field can be set to 3 maximum")
+	} else {
+		return dscp + ecn
+	}
+}
+
 // Turns a IPv4Header into []byte
 func (h *IPv4Header) Marshal() []byte {
+
 	totalLen := make([]byte, 2)
 	binary.BigEndian.PutUint16(totalLen, h.TotalLength)
 
@@ -32,7 +44,7 @@ func (h *IPv4Header) Marshal() []byte {
 	fragOffset := make([]byte, 2)
 	binary.BigEndian.PutUint16(fragOffset, h.FragOffset)
 
-	buf := bytes.NewBuffer([]byte{69, 0})
+	buf := bytes.NewBuffer([]byte{64 + h.HeaderLen, h.DSCPECN})
 	buf.WriteByte(h.HeaderLen)
 	buf.Write(totalLen)
 	buf.Write(id)
@@ -69,46 +81,20 @@ func DetermineLength(data []byte) uint16 {
 // Function to create packets
 func CreatePacket(h *IPv4Header, data []byte) []byte {
 	b = h.Marshal(h)
-
 	return append(b, data...)
 }
 
 // Function to create packets "fast"
 //
 // Ignores stuff like identification, flags, fragmanting, diffserv or ecn.
-func CreateFastPacket(h *IPv4Header, data []byte) []byte {
-	packetBuf := bytes.NewBuffer([]byte{
-		69, // Version + IHL
-		0,  // DiffServ + ECN
-	})
-
-	length := make([]byte, 2)
-	binary.BigEndian.PutUint16(length, uint16(len(data)+24))
-
-	packetBuf.Write(length)
-	packetBuf.Write([]byte{
-		0, 0, // identification
-		0, 0, // flags and fragment offset
-		h.TTL,
-		h.Protocol,
-		0, 0,
-	})
-
-	// addresses
-	packetBuf.Write(h.SourceAddr)
-	packetBuf.Write(h.DestinationAddr)
-
-	// Checksum
-	b := packetBuf.Bytes()
-
-	checksumBytes := make([]byte, 2)
-	binary.BigEndian.PutUint16(checksumBytes, checksum(b))
-
-	copy(b[10:12], checksumBytes)
-
-	err := verifyChecksum(b)
-	util.NonFatalError(err)
-
+func CreateFastPacket(ttl byte, proto byte, data []byte) []byte {
+	header := &IPv4Header{
+		HeaderLen:   5,
+		DSCPECN:     0,
+		TTL:         ttl,
+		Protocol:    proto,
+		TotalLength: DetermineLength(data),
+	}
 	return append(b, data...)
 }
 
